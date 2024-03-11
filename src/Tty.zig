@@ -20,7 +20,7 @@ termios: os.termios,
 /// The file descriptor we are using for I/O
 fd: os.fd_t,
 
-/// the write end of a pipe to signal the tty should exit it's run loop
+/// the write end of a pipe to signal the tty should exit its run loop
 quit_fd: ?os.fd_t = null,
 
 buffered_writer: BufferedWriter,
@@ -51,7 +51,9 @@ pub fn deinit(self: *Tty) void {
 /// stops the run loop
 pub fn stop(self: *Tty) void {
     if (self.quit_fd) |fd| {
-        _ = std.os.write(fd, "q") catch {};
+        _ = std.os.write(fd, "q") catch |err| {
+            log.err("TTY Stop Error: {}", .{ err });
+        };
     }
 }
 
