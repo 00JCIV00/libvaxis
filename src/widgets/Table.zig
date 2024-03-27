@@ -32,6 +32,10 @@ pub const TableContext = struct {
 
     /// Y Offset for drawing to the parent Window.
     y_off: usize = 0,
+
+    /// Column Width
+    /// Note, this should be treated as Read Only. The Column Width will be calculated during `drawTable()`.
+    col_width: usize = 0,
 };
 
 /// Draw a Table for the TUI.
@@ -57,25 +61,26 @@ pub fn drawTable(
         .{ .limit = win.height },
     );
 
-    var item_width = table_win.width / headers.len;
-    if (item_width % 2 != 0) item_width += 1;
+    table_ctx.col_width = table_win.width / headers.len;
+    if (table_ctx.col_width % 2 != 0) table_ctx.col_width +|= 1;
+    while (table_ctx.col_width * headers.len < table_win.width - 1) table_ctx.col_width +|= 1;
 
     if (table_ctx.col > headers.len - 1) table_ctx.*.col = headers.len - 1;
     for (headers[0..], 0..) |hdr_txt, idx| {
         const hdr_bg =
             if (table_ctx.active and idx == table_ctx.col) table_ctx.selected_bg else if (idx % 2 == 0) table_ctx.hdr_bg_1 else table_ctx.hdr_bg_2;
         const hdr_win = table_win.initChild(
-            idx * item_width,
+            idx * table_ctx.col_width,
             0,
-            .{ .limit = item_width },
+            .{ .limit = table_ctx.col_width },
             .{ .limit = 1 },
         );
-        var hdr = vaxis.widgets.alignment.center(hdr_win, @min(item_width -| 1, hdr_txt.len +| 1), 1);
+        var hdr = vaxis.widgets.alignment.center(hdr_win, @min(table_ctx.col_width -| 1, hdr_txt.len +| 1), 1);
         hdr_win.fill(.{ .style = .{ .bg = hdr_bg } });
 
         var seg = [_]vaxis.Cell.Segment{.{
             .text = 
-                if (hdr_txt.len > item_width and alloc != null) try fmt.allocPrint(alloc.?, "{s}...", .{ hdr_txt[0..(item_width -| 4)] })
+                if (hdr_txt.len > table_ctx.col_width and alloc != null) try fmt.allocPrint(alloc.?, "{s}...", .{ hdr_txt[0..(table_ctx.col_width -| 4)] })
                 else hdr_txt
             ,
             .style = .{
@@ -114,14 +119,26 @@ pub fn drawTable(
             .{ .limit = 1 },
         );
         const DataT = @TypeOf(data);
+        if (DataT == []const u8) {
+            row_win.fill(.{ .style = .{ .bg = row_bg } });
+            var seg = [_]vaxis.Cell.Segment{.{
+                .text = 
+                    if (data.len > table_ctx.col_width and alloc != null) try fmt.allocPrint(alloc.?, "{s}...", .{ data[0..(table_ctx.col_width -| 4)] })
+                    else data
+                ,
+                .style = .{ .bg = row_bg },
+            }};
+            try row_win.wrap(seg[0..]);
+            return;
+        }
         const item_fields = meta.fields(DataT);
         inline for (item_fields[0..], 0..) |item_field, item_idx| {
             const item = @field(data, item_field.name);
             const ItemT = @TypeOf(item);
             const item_win = row_win.initChild(
-                item_idx * item_width,
+                item_idx * table_ctx.col_width,
                 0,
-                .{ .limit = item_width },
+                .{ .limit = table_ctx.col_width },
                 .{ .limit = 1 },
             );
             const item_txt = switch (ItemT) {
@@ -146,7 +163,7 @@ pub fn drawTable(
             item_win.fill(.{ .style = .{ .bg = row_bg } });
             var seg = [_]vaxis.Cell.Segment{.{
                 .text = 
-                    if (item_txt.len > item_width and alloc != null) try fmt.allocPrint(alloc.?, "{s}...", .{ item_txt[0..(item_width -| 4)] })
+                    if (item_txt.len > table_ctx.col_width and alloc != null) try fmt.allocPrint(alloc.?, "{s}...", .{ item_txt[0..(table_ctx.col_width -| 4)] })
                     else item_txt
                 ,
                 .style = .{ .bg = row_bg },
